@@ -9,7 +9,7 @@ on:
     - src/**
     - pom.xml
     - .github/workflows/ci.yaml
-  pull_request_target:
+  pull_request:
     branches:
     - develop
     - main
@@ -24,8 +24,17 @@ jobs:
       id-token: write
       contents: read
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'liberica'
+        cache: maven
+    - name: Unit Tests
+      run: ./mvnw -V --no-transfer-progress clean test
     - name: Import Secrets
+      if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
       id: secrets
       uses: hashicorp/vault-action@v2.5.0
       with:
@@ -38,17 +47,7 @@ jobs:
           kv/data/cicd/sonatype username | SONATYPE_USERNAME ;
           kv/data/cicd/sonatype password | SONATYPE_PASSWORD ;
           kv/data/cicd/gpg secring | GPG_SECRING ;
-          kv/data/cicd/gpg passphrase | GPG_PASSPHRASE ;
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'liberica'
-        cache: maven
-        gpg-private-key: ${{ steps.secrets.outputs.GPG_SECRING }}
-        gpg-passphrase: ${{ steps.secrets.outputs.GPG_PASSPHRASE }}
-    - name: Unit Tests
-      run: ./mvnw -V --no-transfer-progress clean test
+          kv/data/cicd/gpg passphrase | GPG_PASSPHRASE ;      
     - name: Deploy to sonatype-snapshots
       if: github.ref == 'refs/heads/develop'
       run: |
@@ -100,4 +99,4 @@ jobs:
     - name: Revoke token
       if: always()
       run: |
-        curl -X POST -s -H "X-Vault-Token: ${VAULT_TOKEN}" ${{ secrets.VAULT_ADDR }}/v1/auth/token/revoke-self
+        curl -X POST -s -H "X-Vault-Token: ${VAULT_TOKEN}" ${{ secrets.VAULT_ADDR }}/v1/auth/token/revoke-self || true
